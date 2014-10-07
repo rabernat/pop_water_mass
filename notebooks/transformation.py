@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import ndimage
 
-def sum_inside_contours(index_field, index_levels, *args):
+def sum_inside_contours(index_field, index_levels, fields, area=1.):
     """Sum the arrays in args within countours
     of index_field. Bins are specifiied by index levels.
     index_levels must be monotonically increasing or decreasing."""
@@ -14,11 +14,16 @@ def sum_inside_contours(index_field, index_levels, *args):
     labels.shape = shape
     
     res = []
-    for arg in args:
-        assert arg.shape == shape
-        arg = np.ma.masked_array(arg, index_field.mask)
+    
+    # wrap it in a list if we only got one argument
+    if isinstance(fields, np.ndarray):
+        fields = [fields,]
+    for field in fields:
+        assert field.shape == shape
+        field = np.ma.masked_array(field, index_field.mask)
         res.append( ndimage.sum(
-            arg.filled(0.), labels=labels, index=np.arange(len(index_levels))
+            (area*field).filled(0.),
+            labels=labels, index=np.arange(len(index_levels))
         ))
     if len(res)==1:
         return res[0]
