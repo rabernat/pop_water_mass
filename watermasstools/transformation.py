@@ -1,5 +1,4 @@
 import numpy as np
-import basins
 import pop_model
 from scipy import ndimage
 
@@ -7,17 +6,22 @@ POP_REGIONS = {
     'Southern Ocean': 1,
     'Pacific Ocean': 2,
     'Indian Ocean': 3,
+    'Red Sea': 4,
     'Atlantic Ocean': 6,
+    'Mediterranean Sea': 7,
+    'Labrador Sea': 8,
+    'GIN Seas': 9,
+    'Arctic Ocean': 10
 }
 
 class WaterMassRegion(object):
     """For defining water mass transformation regions"""
     
-    def __init__(self, name, rholevs=None, basin_name=None, area=1.,
+    def __init__(self, name, rholevs=None, basin_names=None, area=1.,
                  lonmin=None, lonmax=None, latmin=None, latmax=None):
         self.name = name
         self.rholevs = rholevs
-        self.basin_name = basin_name
+        self.basin_names = basin_names
         self.area = 1.
         self.lonmin, self.lonmax = lonmin, lonmax
         self.latmin, self.latmax = latmin, latmax
@@ -32,9 +36,14 @@ class WaterMassRegion(object):
         
         mask = pmodel.mask
         
-        if self.basin_name is not None:
-            bid = POP_REGIONS[self.basin_name]
-            mask += (pmodel.nc.variables['REGION_MASK'][:]!=bid)
+        if self.basin_names is not None:
+            basin_mask = np.zeros_like(mask, dtype='bool')
+            if isinstance(self.basin_names, str):
+                self.basin_names = [self.basin_names,]
+            for bname in self.basin_names:
+                bid = POP_REGIONS[bname]
+                basin_mask += (pmodel.nc.variables['REGION_MASK'][:]==bid)
+            mask += (~basin_mask)
         
         if self.lonmin is not None:
             mask += (lon <= self.lonmin)
