@@ -9,6 +9,9 @@ class POPFile(object):
         self.nc = netCDF4.Dataset(fname)
         self.Ny, self.Nx = self.nc.variables['TAREA'].shape
         
+        # mask
+        self.mask = self.nc.variables['KMT'][:] <= 1
+        
         self.alpha = Alpha(self)
         self.beta = Beta(self)
         self.cp = Cp(self)
