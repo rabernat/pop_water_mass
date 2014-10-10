@@ -17,9 +17,9 @@ POP_REGIONS = {
 class WaterMassRegion(object):
     """For defining water mass transformation regions"""
     
-    def __init__(self, name, rholevs=None, basin_names=None, area=1.,
+    def __init__(self, rholevs=None, basin_names=None, area=1.,
                  lonmin=None, lonmax=None, latmin=None, latmax=None):
-        self.name = name
+
         self.rholevs = rholevs
         self.basin_names = basin_names
         self.area = 1.
@@ -79,6 +79,9 @@ class WaterMassRegion(object):
               sum_inside_contours(rho, rholin, self.area))
             alevs = np.linspace(acum.min(), acum.max(), nlevs)
             self.rholevs = np.interp(alevs, acum, rholin)
+            
+    def set_rholevs(self, rholevs):
+        self.rholevs = rholevs
             
     def calculate_transformation_rate(self, rho, *args):
         if self.mask is None:
