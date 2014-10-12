@@ -69,19 +69,77 @@ class EOSCalculator(object):
         self.nc = parent.nc
         self.parent = parent
 
+
+# from forcing.F90
+# !-----------------------------------------------------------------------
+# !
+# !  convert fresh water flux (kg/m^2/s) to virtual salt flux (msu*cm/s):
+# !  --------------------------------------------------------------------
+# !    ocean reference salinity in (o/oo=psu)
+# !    density of freshwater rho_fw = 1.0 (g/cm^3)
+# !    h2o_flux in (kg/m^2/s) = 0.1 (g/cm^2/s)
+# !
+# !    salt_flux            = - h2o_flux * ocn_ref_salinity / rho_fw
+# !    salt_flux (msu*cm/s) = - h2o_flux (kg/m^2/s)
+# !                           * ocn_ref_salinity (psu)
+# !                           * 1.e-3 (msu/psu)
+# !                           * 0.1 (g/cm^2/s)/(kg/m^2/s)
+# !                           / 1.0 (g/cm^3)
+# !                         = - h2o_flux (kg/m^2/s)
+# !                           * ocn_ref_salinity (psu)
+# !                           * fwflux_factor (cm/s)(msu/psu)/(kg/m^2/s)
+# !
+# !    ==>  fwflux_factor = 1.e-4
+# !
+# !    salt_flux(msu*cm/s) = h2oflux(kg/m^2/s) * salinity_factor
+# !
+# !    ==> salinity_factor = - ocn_ref_salinity(psu) * fwflux_factor
+# !
+# !-----------------------------------------------------------------------
+#
+ocn_ref_salinity = 34.7
+#fwflux_factor   = 1e-4
+fwflux_factor = 1.
+salinity_factor = -ocn_ref_salinity*fwflux_factor
+
+# !-----------------------------------------------------------------------
+# !
+# !  convert heat, solar flux (W/m^2) to temperature flux (C*cm/s):
+# !  --------------------------------------------------------------
+# !    heat_flux in (W/m^2) = (J/s/m^2) = 1000(g/s^3)
+# !    density of seawater rho_sw in (g/cm^3)
+# !    specific heat of seawater cp_sw in (erg/g/C) = (cm^2/s^2/C)
+# !
+# !    temp_flux          = heat_flux / (rho_sw*cp_sw)
+# !    temp_flux (C*cm/s) = heat_flux (W/m^2)
+# !                         * 1000 (g/s^3)/(W/m^2)
+# !                         / [(rho_sw*cp_sw) (g/cm/s^2/C)]
+# !
+# !                       = heat_flux (W/m^2)
+# !                         * hflux_factor (C*cm/s)/(W/m^2)
+# !
+# !    ==>  hflux_factor = 1000/(rho_sw*cp_sw)
+# !
+# !-----------------------------------------------------------------------
+
+cp_sw = 3.996e7
+rho_sw = 4.1/3.996
+hflux_factor = 1000.0/(rho_sw*cp_sw)
+
 class DensFlux(EOSCalculator):
     def __getitem__(self, i):
         S0 = self.nc.variables['SSS'].__getitem__(i)
         T0 = self.nc.variables['SST'].__getitem__(i)
-        Fsalt = self.nc.variables['SFWF_2'].__getitem__(i)
-        Qheat = self.nc.variables['SHF_2'].__getitem__(i)
+        Ffw = self.nc.variables['SFWF_2'].__getitem__(i)
+        Qhf = self.nc.variables['SHF_2'].__getitem__(i)
 
         alpha = eos80.alpha(S0, T0, self.p, pt=True)
         beta = eos80.alpha(S0, T0, self.p, pt=True) 
         cp = eos80.cp(S0, T0, self.p)
         rho0 = eos80.dens0(S0, T0)
         
-        return -alpha*Qheat/cp, rho0*beta*Fsalt*S0/(1 - S0)
+        #return -alpha*Qhf/cp, rho0*beta*Fsalt*S0/(1 - S0)
+        return -alpha*Qhf/cp, rho0*beta*Ffw/salinity_factor
 
 class Alpha(EOSCalculator):
     def __getitem__(self, i):
