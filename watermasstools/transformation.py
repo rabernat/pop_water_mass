@@ -34,7 +34,7 @@ class WaterMassRegion(object):
         lon = pmodel.nc.variables['TLONG'][:]
         lat = pmodel.nc.variables['TLAT'][:]  
         
-        mask = pmodel.mask
+        mask = pmodel.mask.copy()
         
         if self.basin_names is not None:
             basin_mask = np.zeros_like(mask, dtype='bool')

@@ -98,8 +98,10 @@ class EOSCalculator(object):
 # !-----------------------------------------------------------------------
 #
 ocn_ref_salinity = 34.7
+# using PSU, kg, m as units
+fwflux_factor = 1e-3
 #fwflux_factor   = 1e-4
-fwflux_factor = 1.
+#fwflux_factor = 1.  
 salinity_factor = -ocn_ref_salinity*fwflux_factor
 
 # !-----------------------------------------------------------------------
@@ -139,7 +141,8 @@ class DensFlux(EOSCalculator):
         rho0 = eos80.dens0(S0, T0)
         
         #return -alpha*Qhf/cp, rho0*beta*Fsalt*S0/(1 - S0)
-        return -alpha*Qhf/cp, rho0*beta*Ffw/salinity_factor
+        #return -alpha*Qhf/cp, rho0*beta*Ffw/salinity_factor
+        return -alpha*Qhf/cp, rho0*beta*salinity_factor*Ffw
 
 class Alpha(EOSCalculator):
     def __getitem__(self, i):
