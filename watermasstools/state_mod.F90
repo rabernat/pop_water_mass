@@ -1,0 +1,527 @@
+!|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+ module state_mod
+
+!BOP
+! !MODULE: state_mod
+!
+! !DESCRIPTION:
+!  This module contains routines necessary for computing the density 
+!  from model temperature and salinity using an equation of state.
+!
+!  The module supports four forms of EOS:
+!  \begin{enumerate}
+!     \item The UNESCO equation of state computed using the 
+!           potential-temperature-based bulk modulus from Jackett and 
+!           McDougall, JTECH, Vol.12, pp 381-389, April, 1995.
+!     \item The faster and more accurate alternative to the UNESCO eos
+!           of McDougall, Wright, Jackett and Feistel (hereafter 
+!           MWJF, 2001 submission to JTECH).
+!     \item a polynomial fit to the full UNESCO EOS
+!     \item a simple linear EOS based on constant expansion coeffs
+!  \end{enumerate}
+!
+! !REVISION HISTORY:
+!  SVN:$Id: state_mod.F90 26114 2010-12-17 20:29:34Z njn01 $
+
+! !USES:
+
+!!!! Can't use any of the other modules
+
+!    use kinds_mod
+!    use blocks
+!    use distribution
+!    use domain
+!    use constants
+!    use grid
+!    use io
+!    use broadcast
+!    use time_management
+!    use exit_mod
+!    use shr_sys_mod
+
+!#ifdef CCSMCOUPLED
+!   !*** ccsm
+!   use shr_vmath_mod
+!#endif
+
+   implicit none
+!   private
+!   save
+
+! !PUBLIC MEMBER FUNCTIONS:
+
+   public :: state        
+!             init_state,   &
+!             ref_pressure, &
+!             state_singlept
+
+!EOP
+!BOC
+    integer, parameter, public ::               &
+       char_len       = 256                    ,&
+       char_len_long  = 512                    ,&
+       log_kind       = kind(.true.)           ,&
+       int_kind       = kind(1)                ,&
+       i4             = selected_int_kind(6)   ,&
+       i8             = selected_int_kind(13)  ,&
+       r4             = selected_real_kind(6)  ,&
+       r8             = selected_real_kind(13)
+! numbers
+
+    real (r8), parameter, public :: &
+       c0     =    0.0_r8   ,&
+       c1     =    1.0_r8   ,&
+       c2     =    2.0_r8   ,&
+       c3     =    3.0_r8   ,&
+       c4     =    4.0_r8   ,&
+       c5     =    5.0_r8   ,&
+       c8     =    8.0_r8   ,&
+       c10    =   10.0_r8   ,&
+       c16    =   16.0_r8   ,&
+       c1000  = 1000.0_r8   ,&
+       c10000 =10000.0_r8   ,&
+       c1p5   =    1.5_r8   ,&
+       p33    = c1/c3       ,&
+       p5     = 0.500_r8    ,&
+       p25    = 0.250_r8    ,&
+       p125   = 0.125_r8    ,&
+       p001   = 0.001_r8    ,&
+       eps    = 1.0e-10_r8  ,&
+       eps2   = 1.0e-20_r8  ,&
+       bignum = 1.0e+30_r8
+
+
+!-----------------------------------------------------------------------
+!
+!  valid ranges and pressure as function of depth
+!
+!-----------------------------------------------------------------------
+
+   real (r8), parameter, public :: & 
+      tmin = -2.0_r8, &
+      tmax = 40.0_r8, &! valid temperature range for level k
+      smin = 0.0_r8, &
+      smax = 42.0_r8, &! valid salinity    range for level k
+      pressz = 0.0_r8 ! ref pressure (bars) at each level
+
+!-----------------------------------------------------------------------
+!
+!  choices for eos type and valid range checks
+!
+!-----------------------------------------------------------------------
+
+   integer (int_kind), public, parameter :: &
+      state_type_jmcd       = 1,    &! integer ids for state choice
+      state_type_mwjf       = 2,    &
+      state_type_polynomial = 3,    &
+      state_type_linear     = 4
+
+   integer (int_kind), public, parameter ::    &
+      state_itype           = 1 ! input state type chosen
+
+!-----------------------------------------------------------------------
+!
+!  UNESCO EOS constants and JMcD bulk modulus constants
+!
+!-----------------------------------------------------------------------
+
+   !*** for density of fresh water (standard UNESCO)
+
+   real (r8), parameter ::              &
+      unt0 =   999.842594_r8,           &
+      unt1 =  6.793952e-2_r8,           &
+      unt2 = -9.095290e-3_r8,           &
+      unt3 =  1.001685e-4_r8,           &
+      unt4 = -1.120083e-6_r8,           &
+      unt5 =  6.536332e-9_r8
+
+   !*** for dependence of surface density on salinity (UNESCO)
+
+   real (r8), parameter ::              &
+      uns1t0 =  0.824493_r8 ,           &
+      uns1t1 = -4.0899e-3_r8,           &
+      uns1t2 =  7.6438e-5_r8,           &
+      uns1t3 = -8.2467e-7_r8,           &
+      uns1t4 =  5.3875e-9_r8,           &
+      unsqt0 = -5.72466e-3_r8,          &
+      unsqt1 =  1.0227e-4_r8,           &
+      unsqt2 = -1.6546e-6_r8,           &
+      uns2t0 =  4.8314e-4_r8
+
+   !*** from Table A1 of Jackett and McDougall
+
+   real (r8), parameter ::              &
+      bup0s0t0 =  1.965933e+4_r8,       &
+      bup0s0t1 =  1.444304e+2_r8,       &
+      bup0s0t2 = -1.706103_r8   ,       &
+      bup0s0t3 =  9.648704e-3_r8,       &
+      bup0s0t4 = -4.190253e-5_r8
+
+   real (r8), parameter ::              &
+      bup0s1t0 =  5.284855e+1_r8,       &
+      bup0s1t1 = -3.101089e-1_r8,       &
+      bup0s1t2 =  6.283263e-3_r8,       &
+      bup0s1t3 = -5.084188e-5_r8
+
+   real (r8), parameter ::              &
+      bup0sqt0 =  3.886640e-1_r8,       &
+      bup0sqt1 =  9.085835e-3_r8,       &
+      bup0sqt2 = -4.619924e-4_r8
+
+   real (r8), parameter ::              &
+      bup1s0t0 =  3.186519_r8   ,       &
+      bup1s0t1 =  2.212276e-2_r8,       &
+      bup1s0t2 = -2.984642e-4_r8,       &
+      bup1s0t3 =  1.956415e-6_r8 
+
+   real (r8), parameter ::              &
+      bup1s1t0 =  6.704388e-3_r8,       &
+      bup1s1t1 = -1.847318e-4_r8,       &
+      bup1s1t2 =  2.059331e-7_r8,       &
+      bup1sqt0 =  1.480266e-4_r8 
+
+   real (r8), parameter ::              &
+      bup2s0t0 =  2.102898e-4_r8,       &
+      bup2s0t1 = -1.202016e-5_r8,       &
+      bup2s0t2 =  1.394680e-7_r8,       &
+      bup2s1t0 = -2.040237e-6_r8,       &
+      bup2s1t1 =  6.128773e-8_r8,       &
+      bup2s1t2 =  6.207323e-10_r8
+
+
+
+!EOC
+!***********************************************************************
+
+ contains
+
+!***********************************************************************
+!BOP
+! !IROUTINE: state
+! !INTERFACE:
+
+! subroutine state(k, kk, TEMPK, SALTK, this_block, &
+!                         RHOOUT, RHOFULL, DRHODT, DRHODS)
+ subroutine state(PRESREF, TEMPK, SALTK,   &
+                        nx_block, ny_block,      &
+                        RHOOUT, DRHODT, DRHODS)
+
+! !DESCRIPTION:
+!  Returns the density of water at level k from equation of state
+!  $\rho = \rho(d,\theta,S)$ where $d$ is depth, $\theta$ is
+!  potential temperature, and $S$ is salinity. the density can be
+!  returned as a perturbation (RHOOUT) or as the full density
+!  (RHOFULL). Note that only the polynomial EOS choice will return
+!  a perturbation density; in other cases the full density is returned
+!  regardless of which argument is requested.
+!
+!  This routine also computes derivatives of density with respect
+!  to temperature and salinity at level k from equation of state
+!  if requested (ie the optional arguments are present).
+!
+!  If $k = kk$ are equal the density for level k is returned.
+!  If $k \neq kk$ the density returned is that for a parcel
+!  adiabatically displaced from level k to level kk.
+!
+! !REVISION HISTORY:
+!  same as module
+
+! !INPUT PARAMETERS:
+
+!   integer (int_kind), intent(in) :: &
+!      k,                    &! depth level index
+!      kk                     ! level to which water is adiabatically 
+                            ! displaced
+
+   INTEGER*8, intent(in) :: &
+       nx_block,               &
+       ny_block
+
+   REAL*8, intent(in) :: &
+      !PRES,                    &! pressure 
+      PRESREF                     ! pressure to which water is adiabatically 
+                            ! displaced
+
+
+   REAL*8, dimension(nx_block,ny_block), intent(in) :: & 
+      TEMPK,             &! temperature at level k
+      SALTK               ! salinity    at level k
+!f2py intent(in) TEMPK
+!f2py intent(in) SALTK
+
+!   type (block), intent(in) :: &
+!      this_block          ! block information for current block
+
+! !OUTPUT PARAMETERS:
+
+!   real (r8), dimension(nx_block,ny_block), optional, intent(out) :: & 
+   REAL*8, dimension(nx_block,ny_block), intent(out) :: & 
+      RHOOUT,  &! perturbation density of water
+      DRHODT,  &! derivative of density with respect to temperature
+      DRHODS    ! derivative of density with respect to salinity
+!f2py intent(out) RHOOUT
+!f2py intent(out) DRHODT
+!f2py intent(out) DRHODT
+
+
+!EOP
+!BOC
+!-----------------------------------------------------------------------
+!
+!  local variables:
+!
+!-----------------------------------------------------------------------
+
+   INTEGER*8 :: &
+      ib,ie,jb,je,       &! extent of physical domain
+      bid,               &! local block index
+      out_of_range        ! counter for out-of-range T,S values
+
+   REAL*8, dimension(nx_block,ny_block) :: &
+      TQ,SQ,             &! adjusted T,S
+      BULK_MOD,          &! Bulk modulus
+      RHO_S,             &! density at the surface
+      DRDT0,             &! d(density)/d(temperature), for surface
+      DRDS0,             &! d(density)/d(salinity   ), for surface
+      DKDT,              &! d(bulk modulus)/d(pot. temp.)
+      DKDS,              &! d(bulk modulus)/d(salinity  )
+      SQR,DENOMK,        &! work arrays
+      WORK1, WORK2, WORK3, WORK4, T2
+
+   REAL*8 :: p, p2 ! temporary pressure scalars
+
+   !*** MWJF numerator coefficients including pressure
+
+   REAL*8 ::                                                        &
+      mwjfnums0t0, mwjfnums0t1, mwjfnums0t2, mwjfnums0t3,              &
+      mwjfnums1t0, mwjfnums1t1, mwjfnums2t0,                           &
+      mwjfdens0t0, mwjfdens0t1, mwjfdens0t2, mwjfdens0t3, mwjfdens0t4, &
+      mwjfdens1t0, mwjfdens1t1, mwjfdens1t3,                           &
+      mwjfdensqt0, mwjfdensqt2
+
+!-----------------------------------------------------------------------
+!
+!  first check for valid range if requested
+!
+!-----------------------------------------------------------------------
+
+!   bid = this_block%local_id
+
+   !select case (state_range_iopt)
+   !case (state_range_ignore)
+
+      !*** prevent problems with garbage on land points or ghost cells
+      
+      TQ = min(TEMPK, c1000)
+      TQ = max(TQ,   -c1000)
+      SQ = min(SALTK, c1000)
+      SQ = max(SALTK, c0)
+
+
+      TQ = min(TEMPK,tmax)
+      TQ = max(TQ,tmin)
+      SQ = min(SALTK,smax)
+      SQ = max(SQ,smin)
+
+!   end select
+
+!-----------------------------------------------------------------------
+!
+!  now compute density or expansion coefficients
+!
+!-----------------------------------------------------------------------
+
+   !select case (state_itype)
+
+!-----------------------------------------------------------------------
+!
+!  Jackett and McDougall EOS
+!
+!-----------------------------------------------------------------------
+
+      p = PRESREF
+      p2  = p*p
+
+      !SQ  = c1000*SQ
+      SQR = sqrt(SQ)
+      T2  = TQ*TQ
+
+
+      !***
+      !*** first calculate surface (p=0) values from UNESCO eqns.
+      !***
+
+      WORK1 = uns1t0 + uns1t1*TQ + & 
+             (uns1t2 + uns1t3*TQ + uns1t4*T2)*T2
+      WORK2 = SQR*(unsqt0 + unsqt1*TQ + unsqt2*T2)
+
+      RHO_S = unt1*TQ + (unt2 + unt3*TQ + (unt4 + unt5*TQ)*T2)*T2 &
+                      + (uns2t0*SQ + WORK1 + WORK2)*SQ
+
+
+      !***
+      !*** now calculate bulk modulus at pressure p from 
+      !*** Jackett and McDougall formula
+      !***
+
+      WORK3 = bup0s1t0 + bup0s1t1*TQ +                    &
+             (bup0s1t2 + bup0s1t3*TQ)*T2 +                &
+              p *(bup1s1t0 + bup1s1t1*TQ + bup1s1t2*T2) + &
+              p2*(bup2s1t0 + bup2s1t1*TQ + bup2s1t2*T2)
+      WORK4 = SQR*(bup0sqt0 + bup0sqt1*TQ + bup0sqt2*T2 + &
+                   bup1sqt0*p)
+
+      BULK_MOD  = bup0s0t0 + bup0s0t1*TQ +                    &
+                  (bup0s0t2 + bup0s0t3*TQ + bup0s0t4*T2)*T2 + &
+                  p *(bup1s0t0 + bup1s0t1*TQ +                &
+                     (bup1s0t2 + bup1s0t3*TQ)*T2) +           &
+                  p2*(bup2s0t0 + bup2s0t1*TQ + bup2s0t2*T2) + &
+                  SQ*(WORK3 + WORK4)
+
+      DENOMK = c1/(BULK_MOD - p)
+
+      !***
+      !*** now calculate required fields
+      !***
+
+      RHOOUT = ((unt0 + RHO_S)*BULK_MOD*DENOMK)
+
+      !if (present(DRHODT)) then
+      DRDT0 =  unt1 + c2*unt2*TQ +                      &
+               (c3*unt3 + c4*unt4*TQ + c5*unt5*T2)*T2 + &
+               (uns1t1 + c2*uns1t2*TQ +                 &
+                (c3*uns1t3 + c4*uns1t4*TQ)*T2 +         &
+                (unsqt1 + c2*unsqt2*TQ)*SQR )*SQ
+
+      DKDT  = bup0s0t1 + c2*bup0s0t2*TQ +                       &
+              (c3*bup0s0t3 + c4*bup0s0t4*TQ)*T2 +               &
+              p *(bup1s0t1 + c2*bup1s0t2*TQ + c3*bup1s0t3*T2) + &
+              p2*(bup2s0t1 + c2*bup2s0t2*TQ) +                  &
+              SQ*(bup0s1t1 + c2*bup0s1t2*TQ + c3*bup0s1t3*T2 +  &
+                  p  *(bup1s1t1 + c2*bup1s1t2*TQ) +             &
+                  p2 *(bup2s1t1 + c2*bup2s1t2*TQ) +             &
+                  SQR*(bup0sqt1 + c2*bup0sqt2*TQ))
+
+      DRHODT = (DENOMK*(DRDT0*BULK_MOD -   &
+                        PRESREF*(unt0+RHO_S)*DKDT*DENOMK))
+
+      DRDS0  = c2*uns2t0*SQ + WORK1 + c1p5*WORK2
+      DKDS = WORK3 + c1p5*WORK4
+
+      DRHODS = DENOMK*(DRDS0*BULK_MOD -                    &
+                      PRESREF*(unt0+RHO_S)*DKDS*DENOMK)
+
+
+!-----------------------------------------------------------------------
+
+   !end select
+   
+!-----------------------------------------------------------------------
+!EOC
+
+ end subroutine state
+
+!***********************************************************************
+!BOP
+! !IROUTINE: unesco
+! !INTERFACE:
+
+ subroutine unesco (temp, salt, pbars, rho)
+
+! !DESCRIPTION:
+!  This subroutine calculates the density of seawater using the
+!  standard equation of state recommended by unesco (1981).
+!
+!  References:
+!
+!    Gill, A., Atmosphere-Ocean Dynamics: International Geophysical
+!         Series No. 30. Academic Press, London, 1982, pp 599-600.
+!
+!    UNESCO, 10th report of the joint panel on oceanographic tables
+!          and standards. UNESCO Tech. Papers in Marine Sci. No. 36,
+!          Paris, 1981.
+!
+! !REVISION HISTORY:
+!  same as module
+
+! !INPUT PARAMETERS:
+
+   real (r8), intent(in) :: &
+      temp,                 &! in-situ temperature [degrees C]
+      salt,                 &! salinity [practical salinity units]
+      pbars                  ! pressure [bars]
+
+! !OUTPUT PARAMETERS:
+
+   real (r8), intent(out) :: &
+      rho                    ! density in kilograms per cubic meter
+
+!EOP
+!BOC
+!-----------------------------------------------------------------------
+!
+!  local variables
+!
+!-----------------------------------------------------------------------
+
+   real (r8) :: rw, rsto, xkw, xksto, xkstp, &
+                tem2, tem3, tem4, tem5, slt2, st15, pbar2 
+
+!-----------------------------------------------------------------------
+!
+!  compute powers of several variables
+!
+!-----------------------------------------------------------------------
+
+   tem2 = temp**2
+   tem3 = temp**3
+   tem4 = temp**4
+   tem5 = temp**5
+   slt2 = salt**2
+   st15 = salt**(1.5_r8) 
+   pbar2 = pbars**2
+
+!-----------------------------------------------------------------------
+!
+!  compute density
+!
+!-----------------------------------------------------------------------
+
+   rw = unt0 + unt1*temp + unt2*tem2 + unt3*tem3 + & 
+                           unt4*tem4 + unt5*tem5
+
+   rsto = rw +                                       &
+          (uns1t0 + uns1t1*temp + uns1t2*tem2 +      &
+                    uns1t3*tem3 + uns1t4*tem4)*salt  &
+        + (unsqt0 + unsqt1*temp + unsqt2*tem2)*st15 + uns2t0*slt2
+
+   xkw =    1.965221e+4_r8 +                             &
+            1.484206e+2_r8*temp - 2.327105e+0_r8*tem2 +  &
+            1.360477e-2_r8*tem3 - 5.155288e-5_r8*tem4
+
+   xksto =  xkw +                                             &
+            (5.46746e+1_r8      - 6.03459e-1_r8*temp +        &
+             1.09987e-2_r8*tem2 - 6.1670e-5_r8*tem3)*salt     &
+          + (7.944e-2_r8  +                                   &
+             1.6483e-2_r8 *temp - 5.3009e-4_r8*tem2)*st15
+
+   xkstp =  xksto +                                               &
+            (3.239908e+0_r8     + 1.43713e-3_r8*temp +            &
+             1.16092e-4_r8*tem2 - 5.77905e-7_r8*tem3)*pbars       &
+          + (2.2838e-3_r8       - 1.0981e-5_r8 *temp -            &
+             1.6078e-6_r8 *tem2)*pbars*salt                       &
+          + 1.91075e-4_r8       *pbars*st15                       &
+          + (8.50935e-5_r8      - 6.12293e-6_r8*temp +            &
+                                        5.2787e-8_r8 *tem2)*pbar2 &
+          + (-9.9348e-7_r8      + 2.0816e-8_r8 *temp +            &
+             9.1697e-10_r8*tem2)*pbar2*salt
+
+   rho =   rsto / (c1 - pbars/xkstp)
+
+!-----------------------------------------------------------------------
+!EOC
+
+ end subroutine unesco
+ 
+ end module state_mod
