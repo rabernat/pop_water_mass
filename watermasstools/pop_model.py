@@ -5,7 +5,7 @@ import jmd95
 
 class POPFile(object):
     
-    def __init__(self, fname):
+    def __init__(self, fname, hmax=None, hconst=None):
         """Wrapper for POP model netCDF files"""
         self.nc = netCDF4.Dataset(fname)
         self.Ny, self.Nx = self.nc.variables['TAREA'].shape
@@ -17,7 +17,7 @@ class POPFile(object):
         self.beta = Beta(self)
         self.cp = Cp(self)
         self.rho = Rho(self)
-        self.dens_forcing = DensForcing(self)
+        self.dens_forcing = DensForcing(self, hmax=hmax, hconst=hconst)
         
     def initialize_gradient_operator(self):
         # raw grid geometry
@@ -42,7 +42,7 @@ class POPFile(object):
         self._cn = np.where( kmt & kmtn, dtn, 0.)
         self._cs = np.where( kmt & kmts, dts, 0.)
         self._ce = np.where( kmt & kmte, dte, 0.)
-        self._cw = np.where( kmt & kmte, dtw, 0.)
+        self._cw = np.where( kmt & kmtw, dtw, 0.)
         self._cc = -(self._cn + self._cs + self._ce + self._cw)
         
         # mixing coefficients
@@ -65,9 +65,10 @@ class POPFile(object):
         return self._ah * self.laplacian(d2tk)
     
 class EOSCalculator(object):
-    def __init__(self, parent, p=0., hmax=200.):
+    def __init__(self, parent, p=0., hmax=None, hconst=None):
         self.p = p
         self.hmax = hmax
+        self.hconst = hconst
         self.nc = parent.nc
         self.parent = parent
 
@@ -137,8 +138,12 @@ class DensForcing(EOSCalculator):
         T0 = self.nc.variables['SST'].__getitem__(i)
         Ffw = self.nc.variables['SFWF_2'].__getitem__(i)
         Qhf = self.nc.variables['SHF_2'].__getitem__(i)
-        H_ml = self.nc.variables['HMXL_2'].__getitem__(i)/100.
-        H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
+        if self.hconst is not None:
+            H_ml = self.hconst
+        else:
+            H_ml = self.nc.variables['HMXL_2'].__getitem__(i)/100.
+            if self.hmax is not None:
+                H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
 
         rho, drhodT, drhodS = jmd95.eos.state_surface(T0, S0)
         Fdens_heat = drhodT * hflux_factor * Qhf
