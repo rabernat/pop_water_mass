@@ -6,7 +6,7 @@ import time
 ##############################
 
 # give engines time to load
-time.sleep(60)
+time.sleep(20)
 
 c = Client()
 dview = c.direct_view()
@@ -32,6 +32,8 @@ for year in xrange(47,86):
               
 # load a test file
 p = pop_model.POPFile(fnames[0])
+# this doesn't actually get used
+rho = p.rho[0]
 
 # define basins
 natl = transformation.WaterMassRegion(
@@ -65,7 +67,7 @@ for r in a.get():
 #############################
 
 def calc_transformation_rates(pop_fname):
-    p = pop_model.POPFile(fname)
+    p = pop_model.POPFile(pop_fname)
     p.initialize_gradient_operator()
     Nt = len(p.nc.variables['time'])
     
@@ -78,7 +80,7 @@ def calc_transformation_rates(pop_fname):
         
         # calculate density fluxes
         rho, Fheat, Fsalt, Fmix = p.dens_forcing[n]
-        Fmix = np.ma.masked_greater(np.ma.masked_invalid(Fmix),1.)
+        Fmix = numpy.ma.masked_greater(numpy.ma.masked_invalid(Fmix),1.)
         
         for rname, reg in region_dict.iteritems():
             A = reg.calculate_transformation_rate(
