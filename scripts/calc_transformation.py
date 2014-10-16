@@ -1,6 +1,12 @@
 from IPython.parallel import Client
 import time
 
+#####################
+### This Analysis ###
+#####################
+hconst = 50. # assume a surface layer of const depth 50 m
+anal_name = 'hconst%03d' % hconst
+
 ##############################
 ## Set Up Parallel Engines ###
 ##############################
@@ -67,7 +73,7 @@ for r in a.get():
 #############################
 
 def calc_transformation_rates(pop_fname):
-    p = pop_model.POPFile(pop_fname)
+    p = pop_model.POPFile(pop_fname, hconst=50.)
     p.initialize_gradient_operator()
     Nt = len(p.nc.variables['time'])
     
@@ -116,4 +122,4 @@ for r in res :
         all_res[k].append(r[k])
 for k in all_res:
     all_res[k] = numpy.array(all_res[k])
-    numpy.savez('../data/A_%s.npz' % k, A=all_res[k], rholevs=region_dict[k].rholevs)
+    numpy.savez('../data/A_%s_%s.npz' % (anal_name, k), A=all_res[k], rholevs=region_dict[k].rholevs)

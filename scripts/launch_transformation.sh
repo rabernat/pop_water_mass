@@ -10,6 +10,7 @@
 #BSUB -o trans.%J.out        # output file name in which %J is replaced by the job ID
 #BSUB -e trans.%J.err        # error file name in which %J is replaced by the job ID
 #BSUB -q geyser             # queue
+#BSUB -N                    # mail when done
 
 module load python all-python-libs
 ipcluster start -n 24 &
