@@ -1,12 +1,11 @@
 import numpy as np
 from seawater import eos80
-import eos
+import jmd95
 
 def test_eos():
     N = 8
     
     shape = (2,4)
-    
     
     S = np.linspace(28,40,N)
     T = np.linspace(0,25,N)
@@ -14,7 +13,7 @@ def test_eos():
     T.shape = shape
     p = 0.
         
-    out = eos.state_mod.state(p,T,S)
+    out = jmd95.eos.state_surface(T,S)
     jmd95dens0 = out[0]
     alpha = -out[1]/jmd95dens0
     beta = out[2]/jmd95dens0

@@ -1,6 +1,7 @@
 import numpy as np
 import netCDF4
 from seawater import eos80
+import jmd95
 
 class POPFile(object):
     
@@ -16,7 +17,7 @@ class POPFile(object):
         self.beta = Beta(self)
         self.cp = Cp(self)
         self.rho = Rho(self)
-        self.dens_flux = DensFlux(self)
+        self.dens_forcing = DensForcing(self)
         
     def initialize_gradient_operator(self):
         # raw grid geometry
@@ -64,8 +65,9 @@ class POPFile(object):
         return self._ah * self.laplacian(d2tk)
     
 class EOSCalculator(object):
-    def __init__(self, parent, p=0.):
+    def __init__(self, parent, p=0., hmax=200.):
         self.p = p
+        self.hmax = hmax
         self.nc = parent.nc
         self.parent = parent
 
@@ -100,6 +102,7 @@ class EOSCalculator(object):
 ocn_ref_salinity = 34.7
 # using PSU, kg, m as units
 fwflux_factor = 1e-3
+rho_fw = 1e3
 #fwflux_factor   = 1e-4
 #fwflux_factor = 1.  
 salinity_factor = -ocn_ref_salinity*fwflux_factor
@@ -126,23 +129,38 @@ salinity_factor = -ocn_ref_salinity*fwflux_factor
 
 cp_sw = 3.996e7
 rho_sw = 4.1/3.996
-hflux_factor = 1000.0/(rho_sw*cp_sw)
+hflux_factor = 1000.0/(rho_sw*cp_sw) / 100.
 
-class DensFlux(EOSCalculator):
+class DensForcing(EOSCalculator):
     def __getitem__(self, i):
         S0 = self.nc.variables['SSS'].__getitem__(i)
         T0 = self.nc.variables['SST'].__getitem__(i)
         Ffw = self.nc.variables['SFWF_2'].__getitem__(i)
         Qhf = self.nc.variables['SHF_2'].__getitem__(i)
+        H_ml = self.nc.variables['HMXL_2'].__getitem__(i)/100.
+        H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
 
-        alpha = eos80.alpha(S0, T0, self.p, pt=True)
-        beta = eos80.alpha(S0, T0, self.p, pt=True) 
-        cp = eos80.cp(S0, T0, self.p)
-        rho0 = eos80.dens0(S0, T0)
+        rho, drhodT, drhodS = jmd95.eos.state_surface(T0, S0)
+        Fdens_heat = drhodT * hflux_factor * Qhf
+        Fdens_salt = drhodS * salinity_factor * Ffw
+        Fdens_mix = H_ml*self.parent.biharmonic_tendency(rho)
+        
+        #alpha = eos80.alpha(S0, T0, self.p, pt=True)
+        #beta = eos80.alpha(S0, T0, self.p, pt=True) 
+        #cp = eos80.cp(S0, T0, self.p)
+        #rho0 = eos80.dens0(S0, T0)
+        
+        #Fdens_heat = -rho0*alpha*hflux_factor*Qhf
+        #Fdens_salt = rho0*beta*salinity_factor*Ffw
+        
+        return (np.ma.masked_array(rho, self.parent.mask),
+                np.ma.masked_array(Fdens_heat, self.parent.mask),
+                np.ma.masked_array(Fdens_salt, self.parent.mask),
+                np.ma.masked_array(Fdens_mix, self.parent.mask))
         
         #return -alpha*Qhf/cp, rho0*beta*Fsalt*S0/(1 - S0)
         #return -alpha*Qhf/cp, rho0*beta*Ffw/salinity_factor
-        return -alpha*Qhf/cp, rho0*beta*salinity_factor*Ffw
+        #return -alpha*Qhf/cp, rho0*beta*salinity_factor*Ffw
 
 class Alpha(EOSCalculator):
     def __getitem__(self, i):
@@ -171,9 +189,12 @@ class Cp(EOSCalculator):
 class Rho(EOSCalculator):
     def __getitem__(self, i):
         """Calculate Cp from SST and SSS"""
-        return eos80.dens0(
-            self.nc.variables['SSS'].__getitem__(i),
-            self.nc.variables['SST'].__getitem__(i))
+        #return eos80.dens0(
+        #    self.nc.variables['SSS'].__getitem__(i),
+        #    self.nc.variables['SST'].__getitem__(i))
+        return jmd95.eos.state_surface(
+            self.nc.variables['SST'].__getitem__(i),
+            self.nc.variables['SSS'].__getitem__(i))[0]
 
 
         
