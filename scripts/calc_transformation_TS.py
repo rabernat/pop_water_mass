@@ -40,9 +40,9 @@ for year in xrange(47,86):
 p = pop_model.POPFile(fnames[0])
 
 # define TS space
-NT = 70
-NS = 72
-Tlevs = numpy.linspace(-2,34,NT)
+NT = 100
+NS = 98
+Tlevs = numpy.linspace(-4,34,NT)
 Slevs = numpy.linspace(28,41,NS)
 
 # define basins
