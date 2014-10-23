@@ -18,6 +18,7 @@ class POPFile(object):
         self.cp = Cp(self)
         self.rho = Rho(self)
         self.dens_forcing = DensForcing(self, hmax=hmax, hconst=hconst)
+        self.ts_forcing = TSForcing(self, hmax=hmax, hconst=hconst)
         
     def initialize_gradient_operator(self):
         # raw grid geometry
@@ -131,6 +132,27 @@ salinity_factor = -ocn_ref_salinity*fwflux_factor
 cp_sw = 3.996e7
 rho_sw = 4.1/3.996
 hflux_factor = 1000.0/(rho_sw*cp_sw) / 100.
+
+class TSForcing(EOSCalculator):
+    def __getitem__(self, i):
+        S0 = self.nc.variables['SSS'].__getitem__(i)
+        T0 = self.nc.variables['SST'].__getitem__(i)
+        Ffw = self.nc.variables['SFWF_2'].__getitem__(i)
+        Qhf = self.nc.variables['SHF_2'].__getitem__(i)
+
+        if self.hconst is not None:
+            H_ml = self.hconst
+        else:
+            H_ml = self.nc.variables['HMXL_2'].__getitem__(i)/100.
+            if self.hmax is not None:
+                H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
+        FT_forc = hflux_factor * Qhf
+        FS_forc = salinity_factor * Ffw
+        FT_mix = H_ml*self.parent.biharmonic_tendency(T0)
+        FS_mix = H_ml*self.parent.biharmonic_tendency(S0)
+        
+        return [ np.ma.masked_array(F, self.parent.mask) 
+                 for F in [T0, S0, FT_forc, FT_mix, FS_forc, FS_mix] ]        
 
 class DensForcing(EOSCalculator):
     def __getitem__(self, i):

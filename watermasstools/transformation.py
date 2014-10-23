@@ -34,7 +34,7 @@ class WaterMassRegion(object):
         lon = pmodel.nc.variables['TLONG'][:]
         lat = pmodel.nc.variables['TLAT'][:]  
         
-        mask = pmodel.mask.copy()
+        mask = pmodel.mask.copy()   
         
         if self.basin_names is not None:
             basin_mask = np.zeros_like(mask, dtype='bool')
@@ -86,12 +86,56 @@ class WaterMassRegion(object):
     def calculate_transformation_rate(self, rho, *args):
         if self.mask is None:
             raise Exception('Mask is not initialized.')
-        if self.mask is None:
-            raise Exception('Mask is not initialized.')
         return np.array(sum_inside_contours(
             self.mask_field(rho), self.rholevs,
             args, area=self.area))[:,1:] / np.diff(self.rholevs)
 
+class TSWaterMassRegion(WaterMassRegion):
+    
+    def __init__(self, Tlevs, Slevs, **kwargs):
+        """Calculate transformation rates in regions *bounded* by
+        Tlevs and Slevs. The output of the calculations will have
+        dimensions of len(Tlevs)-1, len(Slevs)-1. The center-point
+        coordinates can be accessed via the .Tc and .Sc variables.
+        """
+        self.Tlevs = Tlevs
+        self.Slevs = Slevs
+        self.DT = np.diff(self.Tlevs)
+        self.DS = np.diff(self.Slevs)
+        self.DTDS = (self.DT[np.newaxis,:,np.newaxis] * 
+                     self.DS[np.newaxis,np.newaxis,:])
+        
+        # center point coordinates
+        self.Tc = self.Tlevs[:-1] + 0.5*self.DT
+        self.Sc = self.Slevs[:-1] + 0.5*self.DS
+        
+        # cell edge coordinates (for pcolor)
+        self.S, self.T = np.meshgrid(Slevs,Tlevs)
+        WaterMassRegion.__init__(self, **kwargs)
+        
+    def calculate_transformation_rate(self, T, S, Tforcing, Sforcing):
+        assert isinstance(Tforcing, list)
+        assert isinstance(Sforcing, list)
+        assert len(Tforcing) == len(Sforcing)
+        
+        Nforc = len(Tforcing)
+        if self.mask is None:
+            raise Exception('Mask is not initialized.')
+
+        # it should be faster if we do T and S together
+        F = Tforcing + Sforcing
+        A = sum_inside_contours_2D(
+            self.mask_field(S), self.mask_field(T),
+            self.Slevs, self.Tlevs, F, area=self.area)
+            
+        # discarding the first point means discarding all points with
+        # values lower than Tlevs[0] and Slevs[0]. This seems consistent
+        # with the API.
+        AT = np.array(A[:Nforc])[:,1:,1:] / self.DTDS
+        AS = np.array(A[Nforc:])[:,1:,1:] / self.DTDS
+        
+        return AT, AS
+   
 def sum_inside_contours(index_field, index_levels, fields, area=1.):
     """Sum the arrays in args within countours
     of index_field. Bins are specifiied by index levels.
@@ -104,8 +148,7 @@ def sum_inside_contours(index_field, index_levels, fields, area=1.):
                          right=(sign==1))
     labels.shape = shape
     
-    res = []
-    
+    res = []   
     # wrap it in a list if we only got one argument
     if isinstance(fields, np.ndarray):
         fields = [fields,]
@@ -120,4 +163,70 @@ def sum_inside_contours(index_field, index_levels, fields, area=1.):
         return res[0]
     else:
         return res
+        
+def sum_inside_contours_2D(idx1_field, idx2_field, idx1_levels, idx2_levels,
+                           fields, area=1.):
+    shape = idx1_field.shape
+    assert idx2_field.shape == shape
+    N1 = len(idx1_levels)
+    N2 = len(idx2_levels)
+    labels1 = np.digitize(idx1_field.ravel(), idx1_levels)
+    labels2 = np.digitize(idx2_field.ravel(), idx2_levels)
+    labels = labels1 + N1*labels2
+    labels.shape = shape
+    
+    res = []
+    # wrap it in a list if we only got one argument
+    if isinstance(fields, np.ndarray):
+        fields = [fields,]
+    for field in fields:
+        assert field.shape == shape
+        field = np.ma.masked_array(field, idx1_field.mask)
+        ndsum = ndimage.sum(
+            (area*field).filled(0.),
+            labels=labels, index=np.arange(N1*N2))
+        ndsum.shape = N2, N1
+        res.append(ndsum)
+    if len(res)==1:
+        return res[0]
+    else:
+        return res
+    
+    
+    
+########### Grid for T/S Transformation Calculation ########
+#
+#
+#  T_1+1/2 x-------v_2,0-------x-------v_2,1-------x
+#          |                   |                   |
+#          |                   |                   |
+#          |                   |                   |
+#  T_1    u_1,0      X        u_1,1      X       u_1,2
+#          |                   |                   |
+#          |                   |                   |         
+#          |                   |                   |
+#  T_1/2   x-------v_1,0-------x-------v_1,1---------x
+#          |                   |                   |
+#          |                   |                   |
+#          |->                 |                   |
+#  T_0    u_0,0      X        u_0,1      X       u_0,2
+#          |->                 |                   |
+#          |                   |                   |
+#          |        ^^^        |                   |
+#  T_-1/2  x-------v_0,0-------x-------v_0,1---------x
+#
+#        S_-1/2     S_0      S_1/2      S_1      S_1+1/2 
+#
+#
+###########################################################
+#
+#  We actually want the T and S transformation rates at different
+#  points on this grid? Or not...
+#
+#
+#
+
+
+
+    
         
