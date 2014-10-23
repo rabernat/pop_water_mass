@@ -50,10 +50,10 @@
 !-----------------------------------------------------------------------
 
    real (r8), parameter :: & 
-      tmin = -2.0_r8, &
-      tmax = 40.0_r8, &! valid temperature range for level k
+      tmin = -5.0_r8, &
+      tmax = 50.0_r8, &! valid temperature range for level k
       smin = 0.0_r8, &
-      smax = 42.0_r8 ! valid salinity    range for level k
+      smax = 50.0_r8 ! valid salinity    range for level k
 
 !-----------------------------------------------------------------------
 !

@@ -14,6 +14,6 @@
 
 module load python all-python-libs
 ipcluster start -n 24 &
-python calc_transformation.py
+python calc_transformation_rho.py
 kill %1
 

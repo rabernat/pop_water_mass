@@ -55,13 +55,18 @@ npac.calculate_rholevs(rho, rhomin=1020, rhomax=1027, nlevs=120, linear=True)
 so = transformation.WaterMassRegion(
                     basin_names=['Southern Ocean'], latmax=30)
 so.initialize_mask(p)
-so.calculate_rholevs(rho, rhomin=1022, rhomax=1028.5, nlevs=120, linear=True)
+so.calculate_rholevs(rho, rhomin=1022, rhomax=1030, nlevs=120, linear=True)
 
-region_dict = {'natl': natl, 'npac': npac, 'so': so}
+globe = transformation.WaterMassRegion(
+                    basin_names=['Global'])
+globe.initialize_mask(p)
+globe.calculate_rholevs(rho, rhomin=1018, rhomax=1030, nlevs=120, linear=True)
+
+region_dict = {'natl': natl, 'npac': npac, 'so': so, 'globe': globe}
 
 # push to engines
 dview.push(region_dict)
-dview.execute("region_dict = {'natl': natl, 'npac': npac, 'so': so}")
+dview.execute("region_dict = {'natl': natl, 'npac': npac, 'so': so, 'globe': globe}")
 # check
 dview.execute('a = region_dict.keys()[0]')
 a = dview.gather('a')
@@ -122,4 +127,4 @@ for r in res :
         all_res[k].append(r[k])
 for k in all_res:
     all_res[k] = numpy.array(all_res[k])
-    numpy.savez('../data/A_%s_%s.npz' % (anal_name, k), A=all_res[k], rholevs=region_dict[k].rholevs)
+    numpy.savez('../data/A_rho_%s_%s.npz' % (anal_name, k), A=all_res[k], rholevs=region_dict[k].rholevs)

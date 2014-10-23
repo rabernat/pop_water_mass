@@ -42,8 +42,8 @@ p = pop_model.POPFile(fnames[0])
 # define TS space
 NT = 70
 NS = 72
-Tlevs = np.linspace(-2,34,NT)
-Slevs = np.linspace(28,41,NS)
+Tlevs = numpy.linspace(-2,34,NT)
+Slevs = numpy.linspace(28,41,NS)
 
 # define basins
 natl = transformation.TSWaterMassRegion(Tlevs=Tlevs, Slevs=Slevs,
@@ -98,7 +98,7 @@ def calc_transformation_rates(pop_fname):
         for rname, reg in region_dict.iteritems():
             AT, AS = reg.calculate_transformation_rate(
                                 T, S, [FT_forc, FT_mix], [FS_forc, FS_mix])
-            result[rname] += np.array([AT, AS])
+            result[rname] += numpy.array([AT, AS])
 
     for rname in region_dict:
         result[rname] /= Nt
