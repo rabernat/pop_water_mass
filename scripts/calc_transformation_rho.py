@@ -57,8 +57,7 @@ so = transformation.WaterMassRegion(
 so.initialize_mask(p)
 so.calculate_rholevs(rho, rhomin=1022, rhomax=1030, nlevs=120, linear=True)
 
-globe = transformation.WaterMassRegion(
-                    basin_names=['Global'])
+globe = transformation.WaterMassRegion()
 globe.initialize_mask(p)
 globe.calculate_rholevs(rho, rhomin=1018, rhomax=1030, nlevs=120, linear=True)
 
