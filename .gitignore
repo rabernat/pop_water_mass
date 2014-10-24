@@ -6,4 +6,5 @@
 *.so
 *.out
 *.err
+data*
 build*
