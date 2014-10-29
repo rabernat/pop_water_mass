@@ -72,6 +72,16 @@ class EOSCalculator(object):
         self.hconst = hconst
         self.nc = parent.nc
         self.parent = parent
+        if self.nc.variables.has_key('SHF'):
+            self.hfname = 'SHF'
+            self.fwfname = 'SFWF'
+            self.mlname = 'HMXL'
+        else:
+            self.hfname = 'SHF_2'
+            self.fwfname = 'SFWF_2'
+            self.mlname = 'HMXL_2'
+
+
 
 
 # from forcing.F90
@@ -133,17 +143,25 @@ cp_sw = 3.996e7
 rho_sw = 4.1/3.996
 hflux_factor = 1000.0/(rho_sw*cp_sw) / 100.
 
+def get_surface_ts(nc, i):
+    try:
+        S0 = nc.variables['SSS'].__getitem__(i)
+        T0 = nc.variables['SST'].__getitem__(i)
+    except KeyError:
+        S0 = nc.variables['SALT'][:,0,:,:].__getitem__(i)
+        T0 = nc.variables['TEMP'][:,0,:,:].__getitem__(i)    
+    return T0, S0
+
 class TSForcing(EOSCalculator):
     def __getitem__(self, i):
-        S0 = self.nc.variables['SSS'].__getitem__(i)
-        T0 = self.nc.variables['SST'].__getitem__(i)
-        Ffw = self.nc.variables['SFWF_2'].__getitem__(i)
-        Qhf = self.nc.variables['SHF_2'].__getitem__(i)
+        T0, S0 = get_surface_ts(self.nc, i)
+        Ffw = self.nc.variables[self.fwfname].__getitem__(i)
+        Qhf = self.nc.variables[self.hfname].__getitem__(i)
 
         if self.hconst is not None:
             H_ml = self.hconst
         else:
-            H_ml = self.nc.variables['HMXL_2'].__getitem__(i)/100.
+            H_ml = self.nc.variables[self.mlname].__getitem__(i)/100.
             if self.hmax is not None:
                 H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
         FT_forc = hflux_factor * Qhf
@@ -156,14 +174,13 @@ class TSForcing(EOSCalculator):
 
 class DensForcing(EOSCalculator):
     def __getitem__(self, i):
-        S0 = self.nc.variables['SSS'].__getitem__(i)
-        T0 = self.nc.variables['SST'].__getitem__(i)
-        Ffw = self.nc.variables['SFWF_2'].__getitem__(i)
-        Qhf = self.nc.variables['SHF_2'].__getitem__(i)
+        T0, S0 = get_surface_ts(self.nc, i)
+        Ffw = self.nc.variables[self.fwfname].__getitem__(i)
+        Qhf = self.nc.variables[self.hfname].__getitem__(i)
         if self.hconst is not None:
             H_ml = self.hconst
         else:
-            H_ml = self.nc.variables['HMXL_2'].__getitem__(i)/100.
+            H_ml = self.nc.variables[self.mlname].__getitem__(i)/100.
             if self.hmax is not None:
                 H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
 
