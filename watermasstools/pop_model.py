@@ -5,11 +5,12 @@ import jmd95
 
 class POPFile(object):
     
-    def __init__(self, fname, hmax=None, hconst=None):
+    def __init__(self, fname, hmax=None, hconst=None, pref=0.):
         """Wrapper for POP model netCDF files"""
         self.nc = netCDF4.Dataset(fname)
         self.Ny, self.Nx = self.nc.variables['TAREA'].shape
-        
+        self.pref = pref        
+
         # mask
         self.mask = self.nc.variables['KMT'][:] <= 1
         
@@ -17,7 +18,7 @@ class POPFile(object):
         self.beta = Beta(self)
         self.cp = Cp(self)
         self.rho = Rho(self)
-        self.dens_forcing = DensForcing(self, hmax=hmax, hconst=hconst)
+        self.dens_forcing = DensForcing(self, hmax=hmax, hconst=hconst, p=pref)
         self.ts_forcing = TSForcing(self, hmax=hmax, hconst=hconst)
         
     def initialize_gradient_operator(self):
@@ -184,7 +185,10 @@ class DensForcing(EOSCalculator):
             if self.hmax is not None:
                 H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
 
-        rho, drhodT, drhodS = jmd95.eos.state_surface(T0, S0)
+        if self.p == 0.:
+            rho, drhodT, drhodS = jmd95.eos.state_surface(T0, S0)
+        else:
+            rho, drhodT, drhodS = jmd95.eos.state(self.p, T0, S0)
         Fdens_heat = drhodT * hflux_factor * Qhf
         Fdens_salt = drhodS * salinity_factor * Ffw
         Fdens_mix = H_ml*self.parent.biharmonic_tendency(rho)

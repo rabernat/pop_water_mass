@@ -333,7 +333,8 @@
 !
 !-----------------------------------------------------------------------
 
-      p = PRESREF
+      ! formulas need pressure in bars, not decibars
+      p = 0.10 * PRESREF
       p2  = p*p
 
       !SQ  = c1000*SQ
@@ -397,13 +398,13 @@
                   SQR*(bup0sqt1 + c2*bup0sqt2*TQ))
 
       DRHODT = (DENOMK*(DRDT0*BULK_MOD -   &
-                        PRESREF*(unt0+RHO_S)*DKDT*DENOMK))
+                        p*(unt0+RHO_S)*DKDT*DENOMK))
 
       DRDS0  = c2*uns2t0*SQ + WORK1 + c1p5*WORK2
       DKDS = WORK3 + c1p5*WORK4
 
       DRHODS = DENOMK*(DRDS0*BULK_MOD -                    &
-                      PRESREF*(unt0+RHO_S)*DKDS*DENOMK)
+                      p*(unt0+RHO_S)*DKDS*DENOMK)
 
  end subroutine state
 
