@@ -10,7 +10,19 @@ from IPython.parallel import interactive
 
 @interactive
 def calc_transformation_rates(pop_fname):
-    p = pop_model.POPFile(pop_fname, hconst=50., pref=2000.)
+    """Worker function for transformation analysis.
+    Takes a single file name as argument.
+    The following variables MUST be set in globals:
+        region_dict - a dictionary of water mass regions
+        hconst - the assumed surface layer depth (in m)
+        pref - the reference pressure for EOS
+    """
+
+    assert 'region_dict' in globals()
+    assert 'hconst' in globals()
+    assert 'pref' in globals()
+
+    p = pop_model.POPFile(pop_fname, hconst=hconst, pref=pref)
     p.initialize_gradient_operator()
     Nt = len(p.nc.variables['time'])
     
@@ -42,12 +54,10 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
         fprefix - the string that begins the file names
             (e.g. hybrid_v5_rel04_BC5_ne120_t12_pop62.pop.h.nday1)
         years - a list of years to analyze
-        daily - 
+        fsuffix - a trailing suffix (before .nc)
         pref - reference pressure for analysis
         hconst - depth of assumed surface layer
     """
-
-    anal_name = aname
 
     ##############################
     ## Set Up Parallel Engines ###
@@ -102,6 +112,7 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
     region_dict = {'natl': natl, 'npac': npac, 'so': so, 'globe': globe}
 
     # push to engines
+    dview.push(dict(hconst=hconst, pref=pref))
     dview.push(region_dict)
     dview.execute("region_dict = {'natl': natl, 'npac': npac, 'so': so, 'globe': globe}")
     # check
@@ -134,4 +145,6 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
             all_res[k].append(r[k])
     for k in all_res:
         all_res[k] = numpy.array(all_res[k])
-        numpy.savez('../data/WMT_rho_%s_%s.npz' % (anal_name, k), A=all_res[k], rholevs=region_dict[k].rholevs)
+        numpy.savez('../data/WMT_%s_sigma%1d_hconst%03d_%s.npz' % 
+                        (aname, pref/1000, hconst, k),
+                A=all_res[k], rholevs=region_dict[k].rholevs)

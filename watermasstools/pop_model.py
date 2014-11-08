@@ -51,7 +51,8 @@ class POPFile(object):
         self._ah = -0.2e20*(1280.0/self.Nx)
         j_eq = np.argmin(self.nc.variables['ULAT'][:,0]**2)
         self._ahf = (tarea / self.nc.variables['UAREA'][j_eq,0])**1.5
-    
+        self._ahf[self.mask] = 0.   
+ 
     def laplacian(self, T):
         return (
             self._cc*T +
@@ -191,20 +192,20 @@ class DensForcing(EOSCalculator):
             rho, drhodT, drhodS = jmd95.eos.state(self.p, T0, S0)
         Fdens_heat = drhodT * hflux_factor * Qhf
         Fdens_salt = drhodS * salinity_factor * Ffw
-        Fdens_mix = H_ml*self.parent.biharmonic_tendency(rho)
+
+        # mixing and cabbelling
+        mixing_rho = H_ml * self.parent.biharmonic_tendency(rho)
+        mixing_T = H_ml * self.parent.biharmonic_tendency(T0)
+        mixing_S = H_ml * self.parent.biharmonic_tendency(S0)
+        cab = drhodT*mixing_T + drhodS*mixing_S - mixing_rho
         
-        #alpha = eos80.alpha(S0, T0, self.p, pt=True)
-        #beta = eos80.alpha(S0, T0, self.p, pt=True) 
-        #cp = eos80.cp(S0, T0, self.p)
-        #rho0 = eos80.dens0(S0, T0)
-        
-        #Fdens_heat = -rho0*alpha*hflux_factor*Qhf
-        #Fdens_salt = rho0*beta*salinity_factor*Ffw
-        
-        return (np.ma.masked_array(rho, self.parent.mask),
-                np.ma.masked_array(Fdens_heat, self.parent.mask),
-                np.ma.masked_array(Fdens_salt, self.parent.mask),
-                np.ma.masked_array(Fdens_mix, self.parent.mask))
+        return [ np.ma.masked_array(fld, self.parent.mask) for fld in
+                 [rho, Fdens_heat, Fdens_salt, mixing_rho, cab ] ]
+
+        #return (np.ma.masked_array(rho, self.parent.mask),
+        #        np.ma.masked_array(Fdens_heat, self.parent.mask),
+        #        np.ma.masked_array(Fdens_salt, self.parent.mask),
+        #        np.ma.masked_array(Fdens_mix, self.parent.mask))
         
         #return -alpha*Qhf/cp, rho0*beta*Fsalt*S0/(1 - S0)
         #return -alpha*Qhf/cp, rho0*beta*Ffw/salinity_factor

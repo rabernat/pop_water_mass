@@ -64,9 +64,15 @@ class WaterMassRegion(object):
             raise Exception('Mask is not initialized.')
         return np.ma.masked_array(field, self.mask)
         
-    def calculate_rholevs(self, rho, nlevs=100, linear=False,
+    def calculate_rholevs(self, rho=None, nlevs=100, linear=False,
                             rhomin=None, rhomax=None):
-        rho = self.mask_field(rho)
+        if rho is None:
+            assert linear
+            assert rhomin is not None
+            assert rhomax is not None
+        else:
+            rho = self.mask_field(rho)
+
         if rhomin is None:
             rhomin = rho.min()
         if rhomax is None:
