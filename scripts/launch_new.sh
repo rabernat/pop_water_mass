@@ -2,8 +2,8 @@
 #
 # LSF batch script to run an MPI application
 #
-#BSUB -P UCLB0005
-#BSUB -W 24:00               # wall-clock time (hrs:mins)
+#BSUB -P UWAS0025
+#BSUB -W 5:00               # wall-clock time (hrs:mins)
 #BSUB -n 25                  # number of tasks in job         
 #BSUB -R "span[ptile=25]"    
 #BSUB -J popclim               # job name

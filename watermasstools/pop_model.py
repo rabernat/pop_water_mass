@@ -1,6 +1,6 @@
 import numpy as np
 import netCDF4
-from seawater import eos80
+#from seawater import eos80
 import jmd95
 
 class POPFile(object):
