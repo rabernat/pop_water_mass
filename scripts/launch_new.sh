@@ -14,6 +14,7 @@
 
 module load python all-python-libs
 ipcluster start -n 24 &
-python -u calc_transformation_hires_lores_CO2.py
+#python -u calc_transformation_hires_lores_CO2.py
+python -u calc_transformation_hybrid_v5.py
 kill %1
 

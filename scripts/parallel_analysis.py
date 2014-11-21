@@ -90,24 +90,47 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
     p = pop_model.POPFile(fnames[0], pref=pref)
 
     # define basins
-    natl = transformation.WaterMassRegion(
-                        basin_names=['Atlantic Ocean', 'GIN Seas', 'Labrador Sea'], latmin=15)
-    natl.initialize_mask(p)
-    natl.calculate_rholevs(rhomin=1028, rhomax=1037.8, nlevs=120, linear=True)
-     
-    npac = transformation.WaterMassRegion(
-                        basin_names=['Pacific Ocean'], latmin=15)
-    npac.initialize_mask(p)
-    npac.calculate_rholevs(rhomin=1027, rhomax=1036.5, nlevs=120, linear=True)
-     
-    so = transformation.WaterMassRegion(
-                        basin_names=['Southern Ocean'], latmax=30)
-    so.initialize_mask(p)
-    so.calculate_rholevs(rhomin=1030, rhomax=1037.8, nlevs=120, linear=True)
+    if pref==0:
+        natl = transformation.WaterMassRegion(
+                            basin_names=['Atlantic Ocean', 'GIN Seas', 'Labrador Sea'], latmin=15)
+        natl.initialize_mask(p)
+        natl.calculate_rholevs(rhomin=1022, rhomax=1028.5, nlevs=120, linear=True)
 
-    globe = transformation.WaterMassRegion()
-    globe.initialize_mask(p)
-    globe.calculate_rholevs(rhomin=1026, rhomax=1037.8, nlevs=120, linear=True)
+        npac = transformation.WaterMassRegion(
+                            basin_names=['Pacific Ocean'], latmin=15)
+        npac.initialize_mask(p)
+        npac.calculate_rholevs(rhomin=1020, rhomax=1027, nlevs=120, linear=True)
+
+        so = transformation.WaterMassRegion(
+                            basin_names=['Southern Ocean'], latmax=30)
+        so.initialize_mask(p)
+        so.calculate_rholevs(rhomin=1022, rhomax=1030, nlevs=120, linear=True)
+
+        globe = transformation.WaterMassRegion()
+        globe.initialize_mask(p)
+        globe.calculate_rholevs(rhomin=1018, rhomax=1030, nlevs=120, linear=True)
+    elif pref==2000:  
+        natl = transformation.WaterMassRegion(
+                            basin_names=['Atlantic Ocean', 'GIN Seas', 'Labrador Sea'], latmin=15)
+        natl.initialize_mask(p)
+        natl.calculate_rholevs(rhomin=1028, rhomax=1037.8, nlevs=120, linear=True)
+         
+        npac = transformation.WaterMassRegion(
+                            basin_names=['Pacific Ocean'], latmin=15)
+        npac.initialize_mask(p)
+        npac.calculate_rholevs(rhomin=1027, rhomax=1036.5, nlevs=120, linear=True)
+         
+        so = transformation.WaterMassRegion(
+                            basin_names=['Southern Ocean'], latmax=30)
+        so.initialize_mask(p)
+        so.calculate_rholevs(rhomin=1030, rhomax=1037.8, nlevs=120, linear=True)
+
+        globe = transformation.WaterMassRegion()
+        globe.initialize_mask(p)
+        globe.calculate_rholevs(rhomin=1026, rhomax=1037.8, nlevs=120, linear=True)
+    else:
+        raise ValueError('Invalid pressure level %g specified' % pref)
+
 
     region_dict = {'natl': natl, 'npac': npac, 'so': so, 'globe': globe}
 
