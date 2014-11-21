@@ -185,6 +185,13 @@ class DensForcing(EOSCalculator):
             H_ml = self.nc.variables[self.mlname].__getitem__(i)/100.
             if self.hmax is not None:
                 H_ml = np.ma.masked_greater(H_ml, self.hmax).filled(self.hmax)
+        
+        # average the variables if we got multiple time elements
+        if isinstance(i, slice):
+            T0, S0, Ffw, Qhf = (T0.mean(axis=0), S0.mean(axis=0),
+                                Ffw.mean(axis=0), Qhf.mean(axis=0))
+            if isinstance(H_ml, np.ndarray):
+                H_ml = H_ml.mean(axis=0)
 
         if self.p == 0.:
             rho, drhodT, drhodS = jmd95.eos.state_surface(T0, S0)

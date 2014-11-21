@@ -21,6 +21,7 @@ def calc_transformation_rates(pop_fname):
     assert 'region_dict' in globals()
     assert 'hconst' in globals()
     assert 'pref' in globals()
+    assert 'monthly_mean' in globals()
 
     p = pop_model.POPFile(pop_fname, hconst=hconst, pref=pref)
     p.initialize_gradient_operator()
@@ -30,23 +31,31 @@ def calc_transformation_rates(pop_fname):
     for rname in region_dict:
         result[rname] = 0.
     
-    for n in range(Nt):
-        print n
-        
-        # calculate density fluxes
-        rho, Fheat, Fsalt, Fmix, Fcab = p.dens_forcing[n]
-        
+    if monthly_mean:
+    # take the monthly mean of T, S, fluxes first
+        rho, Fheat, Fsalt, Fmix, Fcab = p.dens_forcing[:Nt]
         for rname, reg in region_dict.iteritems():
             A = reg.calculate_transformation_rate(
                                 rho,Fheat, Fsalt, Fmix, Fcab)
             result[rname] += A
+    else:
+    # calculate transformation for each daily snapshot
+        for n in range(Nt):
+            print n
+            rho, Fheat, Fsalt, Fmix, Fcab = p.dens_forcing[n]
+            
+            for rname, reg in region_dict.iteritems():
+                A = reg.calculate_transformation_rate(
+                                    rho,Fheat, Fsalt, Fmix, Fcab)
+                result[rname] += A
 
-    for rname in region_dict:
-        result[rname] /= Nt
+        for rname in region_dict:
+            result[rname] /= Nt
 
     return result
 
-def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
+def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50.,
+            monthly_mean=False, fsuffix=''):
     """Perform water mass analysis on a specific POP model run.
     aname - (string) the nickname of this specific analysis,
                 used when saving data
@@ -57,6 +66,9 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
         fsuffix - a trailing suffix (before .nc)
         pref - reference pressure for analysis
         hconst - depth of assumed surface layer
+        monthly_mean - whether to calculate the
+            transformation rate on the monthly mean instead of
+            of the daily snapshots
     """
 
     ##############################
@@ -135,7 +147,7 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
     region_dict = {'natl': natl, 'npac': npac, 'so': so, 'globe': globe}
 
     # push to engines
-    dview.push(dict(hconst=hconst, pref=pref))
+    dview.push(dict(hconst=hconst, pref=pref, monthly_mean=monthly_mean))
     dview.push(region_dict)
     dview.execute("region_dict = {'natl': natl, 'npac': npac, 'so': so, 'globe': globe}")
     # check
@@ -151,7 +163,7 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50., fsuffix=''):
     res = lview.map(calc_transformation_rates, fnames)
 
     while not res.ready():
-        print 'progress', res.progress / float(len(res))
+        print 'progress %3.2f%%' % 100*res.progress/float(len(res))
         time.sleep(60)
 
     assert res.successful()
