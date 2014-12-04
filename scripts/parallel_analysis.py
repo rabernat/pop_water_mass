@@ -223,7 +223,7 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50.,
     res = lview.map(calc_transformation_rates, fnames)
 
     while not res.ready():
-        print 'progress %3.2f%%' % 100*res.progress/float(len(res))
+        print 'progress %3.2f%%' % (100*res.progress/float(len(res)))
         time.sleep(60)
 
     assert res.successful()
