@@ -95,6 +95,13 @@ class WaterMassRegion(object):
         return np.array(sum_inside_contours(
             self.mask_field(rho), self.rholevs,
             args, area=self.area))[:,1:] / np.diff(self.rholevs)
+            
+    # for calculation in area coordinates instead of tracer coordinates        
+    def sum_in_rholevs(self, rho, *args):
+        return sum_inside_contours(
+            self.mask_field(rho), self.rholevs,
+            args, area=self.area
+        )
 
 class TSWaterMassRegion(WaterMassRegion):
     

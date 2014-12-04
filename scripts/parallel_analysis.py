@@ -54,7 +54,60 @@ def calc_transformation_rates(pop_fname):
 
     return result
 
+# This is too repetetive
+# I guess we need a more generic framework
+@interactive
+def calc_Fd(pop_fname):
+    """Worker function for Nakamura analysis.
+    Takes a single file name as argument.
+    The following variables MUST be set in globals:
+        region_dict - a dictionary of water mass regions
+        hconst - the assumed surface layer depth (in m)
+        pref - the reference pressure for EOS
+    """
+
+    assert 'region_dict' in globals()
+    assert 'hconst' in globals()
+    assert 'pref' in globals()
+    assert 'monthly_mean' in globals()
+
+    p = pop_model.POPFile(pop_fname, hconst=hconst, pref=pref)
+    p.initialize_gradient_operator()
+    Nt = len(p.nc.variables['time'])
+    
+    result = dict()
+    for rname in region_dict:
+        result[rname] = 0.
+    
+    if monthly_mean:
+        rho_mm = p.rho[:Nt]
+        Nt = 1
+        
+    # calculate transformation for each daily snapshot
+    for n in range(Nt):
+        print n
+        if monthly_mean:
+            rho = rho_mm
+        else:
+            rho = p.rho[n]
+        diss = p._ah * p._ahf * p.laplacian(rho)**2
+        for rname, reg in region_dict.iteritems():
+            dA, diss_sum = reg.sum_in_rholevs(rho, numpy.ones_like(diss), diss)
+            dDiss_dA = diss_sum[1:] / dA[1:]
+            dq_dA = numpy.ma.masked_invalid(numpy.diff(reg.rholevs) / dA[1:])
+            A = numpy.cumsum(dA)[1:]
+
+            Fd = numpy.ma.masked_invalid(dDiss_dA / dq_dA).filled(0.)
+            result[rname] += numpy.array([A, Fd, dq_dA])
+
+    for rname in region_dict:
+        result[rname] /= Nt
+
+    return result
+
+
 def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50.,
+            task='calc_transformation_rates',
             monthly_mean=False, fsuffix=''):
     """Perform water mass analysis on a specific POP model run.
     aname - (string) the nickname of this specific analysis,
@@ -160,6 +213,13 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50.,
     ## Apply on Engines ###
     #######################
 
+    if task=='calc_transformation_rates':
+        mapfunc = calc_transformation_rates
+        prefix = 'WMT'
+    elif task=='calc_Fd':
+        mapfunc = calc_Fd
+        prefix = 'FD'
+
     res = lview.map(calc_transformation_rates, fnames)
 
     while not res.ready():
@@ -180,6 +240,6 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50.,
             all_res[k].append(r[k])
     for k in all_res:
         all_res[k] = numpy.array(all_res[k])
-        numpy.savez('../data/WMT_%s_sigma%1d_hconst%03d_%s.npz' % 
-                        (aname, pref/1000, hconst, k),
+        numpy.savez('../data/%s_%s_sigma%1d_hconst%03d_%s.npz' % 
+                        (prefix, aname, pref/1000, hconst, k),
                 A=all_res[k], rholevs=region_dict[k].rholevs)

@@ -52,7 +52,14 @@ class POPFile(object):
         j_eq = np.argmin(self.nc.variables['ULAT'][:,0]**2)
         self._ahf = (tarea / self.nc.variables['UAREA'][j_eq,0])**1.5
         self._ahf[self.mask] = 0.   
- 
+        
+        # stuff for gradient
+        # reciprocal of dx and dy (in meters)
+        self._dxtr = 100.*self.nc.variables['DXT'][:]**-1
+        self._dytr = 100.*self.nc.variables['DYT'][:]**-1
+        self._kmaske = np.where(kmt & kmte, 1., 0.)
+        self._kmaskn = np.where(kmt & kmtn, 1., 0.)
+                
     def laplacian(self, T):
         return (
             self._cc*T +
@@ -61,7 +68,16 @@ class POPFile(object):
             self._ce*np.roll(T,-1,axis=1) +
             self._cw*np.roll(T,1,axis=1)          
         )
-    
+        
+    def gradient_modulus(self, T):
+        dTx = self._kmaske * (np.roll(T,-1,axis=0) - T)
+        dTy = self._kmaskn * (np.roll(T,-1,axis=1) - T)
+        
+        return np.sqrt( 0.5 *
+                    (dTx**2 + np.roll(dTx,1,axis=0)**2) * self._dxtr**2
+                   +(dTy**2 + np.roll(dTy,1,axis=1)**2) * self._dytr**2
+        )        
+        
     def biharmonic_tendency(self, T):
         """Caclulate tendency due to biharmonic diffusion of T."""
         d2tk = self._ahf * self.laplacian(T)
@@ -245,12 +261,11 @@ class Cp(EOSCalculator):
 class Rho(EOSCalculator):
     def __getitem__(self, i):
         """Calculate Cp from SST and SSS"""
-        #return eos80.dens0(
-        #    self.nc.variables['SSS'].__getitem__(i),
-        #    self.nc.variables['SST'].__getitem__(i))
-        return jmd95.eos.state_surface(
-            self.nc.variables['SST'].__getitem__(i),
-            self.nc.variables['SSS'].__getitem__(i))[0]
-
+        T0, S0 = get_surface_ts(self.nc, i)
+        if self.p == 0.:
+            rho, drhodT, drhodS = jmd95.eos.state_surface(T0, S0)
+        else:
+            rho, drhodT, drhodS = jmd95.eos.state(self.p, T0, S0)
+        return rho
 
         
