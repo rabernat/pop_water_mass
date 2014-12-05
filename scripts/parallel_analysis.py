@@ -90,15 +90,23 @@ def calc_Fd(pop_fname):
             rho = rho_mm
         else:
             rho = p.rho[n]
-        diss = p._ah * p._ahf * p.laplacian(rho)**2
+        # realized I can use a simpler formula
+        #diss = p._ah * p._ahf * p.laplacian(rho)**2
+        diss =  p.biharmonic_tendency(rho)
         for rname, reg in region_dict.iteritems():
             dA, diss_sum = reg.sum_in_rholevs(rho, numpy.ones_like(diss), diss)
-            dDiss_dA = diss_sum[1:] / dA[1:]
-            dq_dA = numpy.ma.masked_invalid(numpy.diff(reg.rholevs) / dA[1:])
-            A = numpy.cumsum(dA)[1:]
+            A = numpy.cumsum(dA)
+            Fd = numpy.cumsum(diss_sum)
 
-            Fd = numpy.ma.masked_invalid(dDiss_dA / dq_dA).filled(0.)
-            result[rname] += numpy.array([A, Fd, dq_dA])
+            dq = numpy.diff(reg.rholevs)
+            dq = numpy.hstack([dq[0], dq])
+            dq_dA = numpy.ma.masked_invalid(dq / dA)
+            Keff = numpy.ma.masked_invalid(Fd / dq_dA).filled(0.)
+            #dDiss_dA = diss_sum[1:] / dA[1:]
+            #dq_dA = numpy.ma.masked_invalid(numpy.diff(reg.rholevs) / dA[1:])
+            #Fd = numpy.ma.masked_invalid(dDiss_dA / dq_dA).filled(0.)
+            
+            result[rname] += numpy.array([A, Fd, Keff])
 
     for rname in region_dict:
         result[rname] /= Nt
@@ -220,7 +228,7 @@ def wmt_rho(aname, ddir, fprefix, years, pref=0, hconst=50.,
         mapfunc = calc_Fd
         prefix = 'FD'
 
-    res = lview.map(calc_transformation_rates, fnames)
+    res = lview.map(mapfunc, fnames)
 
     while not res.ready():
         print 'progress %3.2f%%' % (100*res.progress/float(len(res)))
