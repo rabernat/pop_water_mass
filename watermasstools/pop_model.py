@@ -5,7 +5,7 @@ import jmd95
 
 class POPFile(object):
     
-    def __init__(self, fname, hmax=None, hconst=None, pref=0.):
+    def __init__(self, fname, hmax=None, hconst=None, pref=0., ah=-3e17):
         """Wrapper for POP model netCDF files"""
         self.nc = netCDF4.Dataset(fname)
         self.Ny, self.Nx = self.nc.variables['TAREA'].shape
@@ -20,6 +20,8 @@ class POPFile(object):
         self.rho = Rho(self)
         self.dens_forcing = DensForcing(self, hmax=hmax, hconst=hconst, p=pref)
         self.ts_forcing = TSForcing(self, hmax=hmax, hconst=hconst)
+        
+        self._ah = ah
         
     def initialize_gradient_operator(self):
         # raw grid geometry
@@ -48,7 +50,7 @@ class POPFile(object):
         self._cc = -(self._cn + self._cs + self._ce + self._cw)
         
         # mixing coefficients
-        self._ah = -0.2e20*(1280.0/self.Nx)
+        #self._ah = -0.2e20*(1280.0/self.Nx)
         j_eq = np.argmin(self.nc.variables['ULAT'][:,0]**2)
         self._ahf = (tarea / self.nc.variables['UAREA'][j_eq,0])**1.5
         self._ahf[self.mask] = 0.   
@@ -262,6 +264,10 @@ class Rho(EOSCalculator):
     def __getitem__(self, i):
         """Calculate Cp from SST and SSS"""
         T0, S0 = get_surface_ts(self.nc, i)
+        
+        # average the variables if we got multiple time elements
+        if isinstance(i, slice):
+            T0, S0, = T0.mean(axis=0), S0.mean(axis=0)
         if self.p == 0.:
             rho, drhodT, drhodS = jmd95.eos.state_surface(T0, S0)
         else:
