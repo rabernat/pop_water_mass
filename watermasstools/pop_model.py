@@ -5,7 +5,7 @@ import jmd95
 
 class POPFile(object):
     
-    def __init__(self, fname, hmax=None, hconst=None, pref=0., ah=-3e17):
+    def __init__(self, fname, hmax=None, hconst=None, pref=0., ah=-3e17, is3d=False):
         """Wrapper for POP model netCDF files"""
         self.nc = netCDF4.Dataset(fname)
         self.Ny, self.Nx = self.nc.variables['TAREA'].shape
@@ -13,6 +13,18 @@ class POPFile(object):
 
         # mask
         self.mask = self.nc.variables['KMT'][:] <= 1
+
+        self.is3d = is3d
+        if self.is3d:
+            self.z_t = nc.variables['z_t'][:]
+            self.z_w_top = nc.variables['z_w_top'][:]
+            self.z_w_bot = nc.variables['z_w_bop'][:]
+            self.Nz = len(self.z_t)
+            kmt = p.nc.variables['KMT'][:]
+            self.mask3d = np.zeros((self.Nz, self.Ny, self.Nx)), dtype='b')
+            Nz = mask3d.shape[0]
+            for k in range(Nz):
+                self.mask3d[k] = (kmt<=k)
         
         self.alpha = Alpha(self)
         self.beta = Beta(self)
@@ -20,7 +32,6 @@ class POPFile(object):
         self.rho = Rho(self)
         self.dens_forcing = DensForcing(self, hmax=hmax, hconst=hconst, p=pref)
         self.ts_forcing = TSForcing(self, hmax=hmax, hconst=hconst)
-        
         self._ah = ah
         
     def initialize_gradient_operator(self):
@@ -61,6 +72,9 @@ class POPFile(object):
         self._dytr = 100.*self.nc.variables['DYT'][:]**-1
         self._kmaske = np.where(kmt & kmte, 1., 0.)
         self._kmaskn = np.where(kmt & kmtn, 1., 0.)
+        
+        self._dxu = self.nc.variables['DXU'][:]
+        self._dyu = self.nc.variables['DYU'][:]
                 
     def laplacian(self, T):
         return (
@@ -84,6 +98,24 @@ class POPFile(object):
         """Caclulate tendency due to biharmonic diffusion of T."""
         d2tk = self._ahf * self.laplacian(T)
         return self._ah * self.laplacian(d2tk)
+        
+    def horizontal_flux_divergence(self, uflux, vflux):
+        """Designed to be used with diagnostics such as DIFE_*, DIFN_*.
+        Returns a pure tendency."""
+        workx = 0.5 * uflux * self._dyu
+        worky = 0.5 * vflux * self._dxu
+        work1 = workx + np.roll(workx, 1, axis=-1)
+        work1 -= np.roll(work1, 1, axis=-2)
+        work2 = worky + np.roll(worky, 1, axis=-2)
+        work2 -= np.roll(work2, 1, axis=-1)
+        res = work1 + work2
+        if self.is3d and (res.ndim>2):
+            if res.shape[-3]==self.Nz:
+                return np.ma.masked_array(res, self.mask3d).filled(0.)
+        else:
+            return np.ma.masked_array(res, self.mask).filled(0.)
+    
+    
     
 class EOSCalculator(object):
     def __init__(self, parent, p=0., hmax=None, hconst=None):
